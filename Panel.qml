@@ -1598,29 +1598,14 @@ Panel {
           }
 
           InfoLabel { text: "DNS Servers" }
-          Column {
-            Layout.fillWidth: true
-            Layout.columnSpan: 4
-            spacing: 2
-
-            Repeater {
-              model: root.selectedIfaceDns()
-
-              DetailValue {
-                width: parent.width
-                text: modelData
-                horizontalAlignment: Text.AlignHCenter
-                copyable: !!modelData
-                tooltipText: "Copy DNS server"
-              }
+          DetailValue {
+            Layout.columnSpan: 3
+            text: {
+              var servers = root.selectedIfaceDns()
+              return servers.length > 0 ? servers.join(",") : "--"
             }
-
-            DetailValue {
-              width: parent.width
-              text: "--"
-              horizontalAlignment: Text.AlignHCenter
-              visible: root.selectedIfaceDns().length === 0
-            }
+            copyable: text !== "--"
+            tooltipText: "Copy DNS servers"
           }
         }
       }
