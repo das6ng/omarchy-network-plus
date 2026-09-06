@@ -1,7 +1,8 @@
 #!/bin/bash
 # All interfaces with their full address lists for the dash.network panel.
 # Output: default-route key/value lines, a "---" separator, then per-interface
-# `interface` lines followed by their `ipv4`/`ipv6` address lines. Tab-separated.
+# `interface` lines followed by `ipv4`/`ipv6` address lines and the interface's
+# per-family default gateways (`gw4`/`gw6`). Tab-separated.
 
 internet_probe=1.1.1.1
 
@@ -60,8 +61,38 @@ print_default_route_info() {
   fi
 }
 
+# DNS servers in use, per link plus "global", from systemd-resolved.
+# Emits one dns line per server: dns <link-or-global> <addr> (zone %N stripped).
+print_dns_servers() {
+  command -v resolvectl >/dev/null 2>&1 || return 0
+
+  local line scope addrs addr
+  while IFS= read -r line; do
+    case "$line" in
+      Global:*)
+        scope="global"
+        line="${line#Global:}"
+        ;;
+      Link\ *\(*\):*)
+        scope="${line#Link *(}"
+        scope="${scope%%)*}"
+        line="${line#*):}"
+        ;;
+      *)
+        continue
+        ;;
+    esac
+
+    for addr in $line; do
+      addr="${addr%%%*}"
+      [[ "$addr" =~ ^[0-9A-Fa-f:.]+$ ]] || continue
+      printf 'dns\t%s\t%s\n' "$scope" "$addr"
+    done
+  done < <(resolvectl dns 2>/dev/null)
+}
+
 print_interface_list() {
-  local ifaces iface state mac mtu
+  local ifaces iface state mac mtu gw4 gw6
   ifaces=$(ls -1 /sys/class/net/ 2>/dev/null | grep -v '^lo$')
 
   for iface in $ifaces; do
@@ -78,9 +109,17 @@ print_interface_list() {
     while IFS= read -r addr; do
       [[ -n "$addr" ]] && printf 'ipv6\t%s\t%s\n' "$iface" "$addr"
     done < <(ip -j -6 addr show "$iface" 2>/dev/null | jq -r '.[].addr_info[]? | select(.family == "inet6") | "\(.local)/\(.prefixlen)"' 2>/dev/null)
+
+    # Per-family default gateway on this interface. Absent line = no default
+    # route of that family here (e.g. tailscale0).
+    gw4=$(ip -j -4 route show default dev "$iface" 2>/dev/null | jq -r '.[0].gateway // ""' 2>/dev/null)
+    [[ -n "$gw4" ]] && printf 'gw4\t%s\t%s\n' "$iface" "$gw4"
+    gw6=$(ip -j -6 route show default dev "$iface" 2>/dev/null | jq -r '.[0].gateway // ""' 2>/dev/null)
+    [[ -n "$gw6" ]] && printf 'gw6\t%s\t%s\n' "$iface" "$gw6"
   done
 }
 
 print_default_route_info
 printf '%s\n' "---"
+print_dns_servers
 print_interface_list

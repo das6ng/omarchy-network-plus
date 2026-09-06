@@ -32,11 +32,19 @@ Panel {
   property var info: ({})  // { iface, type, ip, prefix, gateway, speed, duplex, ssid, signal, freq, bitrate, rx_bytes, tx_bytes, router_ping_ms, internet_ping_ms }
 
   // Every interface with its full address list from network-status-all.sh:
-  // [{ name, state, mac, mtu, ipv4: [], ipv6: [] }].
+  // [{ name, state, mac, mtu, ipv4: [], ipv6: [], gw4, gw6 }].
   property var allInterfaces: []
   // Which interface the address list describes. Empty until the first sample
   // lands, then defaults to the default-route interface.
   property string selectedInterface: ""
+
+  // IPv6 suffixes can identify the machine (EUI-64/DHCPv6 stability); the
+  // full list stays masked until explicitly revealed.
+  property bool showIpv6: false
+
+  // Machine-wide resolvers (systemd-resolved "Global:" scope). Per-link
+  // resolvers live on each entry of allInterfaces as entry.dns.
+  property var dnsGlobal: []
   readonly property string allIfacesScript: "/home/dash/.config/omarchy/plugins/dash.network/network-status-all.sh"
 
   // Throughput tracking. Rates are computed as deltas between successive
@@ -524,6 +532,7 @@ Panel {
     var interfaces = []
     var current = null
     var inInterfaces = false
+    var dnsByIface = {}
 
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i]
@@ -552,15 +561,29 @@ Panel {
           mac: parts[2] || "",
           mtu: parts[3] || "",
           ipv4: [],
-          ipv6: []
+          ipv6: [],
+          gw4: "",
+          gw6: ""
         }
       } else if (current && key === "ipv4" && parts.length > 1) {
         current.ipv4.push(parts[1])
       } else if (current && key === "ipv6" && parts.length > 1) {
         current.ipv6.push(parts[1])
+      } else if (current && key === "gw4" && parts.length > 1) {
+        current.gw4 = parts[1]
+      } else if (current && key === "gw6" && parts.length > 1) {
+        current.gw6 = parts[1]
+      } else if (key === "dns" && parts.length > 1) {
+        if (!dnsByIface[parts[0]]) dnsByIface[parts[0]] = []
+        dnsByIface[parts[0]].push(parts[1])
       }
     }
     if (current) interfaces.push(current)
+
+    for (var d = 0; d < interfaces.length; d++) {
+      interfaces[d].dns = dnsByIface[interfaces[d].name] || []
+    }
+    dnsGlobal = dnsByIface.global || []
 
     allInterfaces = interfaces
     if (selectedInterface === "" && defaultIface !== "") selectedInterface = defaultIface
@@ -573,16 +596,56 @@ Panel {
     return null
   }
 
-  // Every address on the selected interface, v4 first. Falls back to the
-  // default-route IP until the interface sample arrives.
-  function selectedIfaceIps() {
+  // Per-family address lists for the selected interface. IPv4 falls back to
+  // the default-route IP until the interface sample arrives.
+  function selectedIfaceIpv4() {
     var entry = ifaceEntry(selectedInterface)
     if (!entry) return info.ip ? [info.ip + (info.prefix ? "/" + info.prefix : "")] : []
-    var ips = entry.ipv4.concat(entry.ipv6)
-    if (ips.length === 0 && info.iface === selectedInterface && info.ip) {
+    if (entry.ipv4.length === 0 && info.iface === selectedInterface && info.ip) {
       return [info.ip + (info.prefix ? "/" + info.prefix : "")]
     }
-    return ips
+    return entry.ipv4
+  }
+
+  function selectedIfaceIpv6() {
+    var entry = ifaceEntry(selectedInterface)
+    return entry ? entry.ipv6 : []
+  }
+
+  // Partial mask: hextets 3-6 become bullets, first two and last groups
+  // stay readable. Prefix length is kept; row height stays stable.
+  function maskedIpv6(addr) {
+    var s = String(addr)
+    var slash = s.indexOf("/")
+    var body = slash >= 0 ? s.substring(0, slash) : s
+    var suffix = slash >= 0 ? s.substring(slash) : ""
+    var groups = body.split(":")
+    for (var i = 2; i < 6 && i < groups.length; i++) {
+      groups[i] = "••••"
+    }
+    return groups.join(":") + suffix
+  }
+
+  // Per-family default gateway on the selected interface. Falls back to the
+  // default-route gateway until the interface sample arrives; an interface
+  // without a default route of that family honestly shows "--".
+  function selectedIfaceGw4() {
+    var entry = ifaceEntry(selectedInterface)
+    if (!entry) return info.gateway || "--"
+    return entry.gw4 !== "" ? entry.gw4 : "--"
+  }
+
+  function selectedIfaceGw6() {
+    var entry = ifaceEntry(selectedInterface)
+    if (!entry) return "--"
+    return entry.gw6 !== "" ? entry.gw6 : "--"
+  }
+
+  // Resolvers used by the selected link; falls back to the global scope.
+  function selectedIfaceDns() {
+    var entry = ifaceEntry(selectedInterface)
+    if (entry && entry.dns.length > 0) return entry.dns
+    return dnsGlobal
   }
 
   function updateDetails(raw) {
@@ -1396,34 +1459,123 @@ Panel {
           InfoLabel { text: "Uploaded" }
           DetailValue { text: root.hasTransferStats ? root.formatBytes(parseFloat(root.info.tx_bytes || "0")) : "--" }
 
-          InfoLabel { text: "IP Address" }
+          InfoLabel { text: "IPv4 Address" }
           Column {
             Layout.fillWidth: true
             Layout.columnSpan: 3
             spacing: 2
 
             Repeater {
-              model: root.selectedIfaceIps()
+              model: root.selectedIfaceIpv4()
 
               DetailValue {
                 width: parent.width
                 text: modelData
                 copyable: !!modelData
-                tooltipText: "Copy IP"
+                tooltipText: "Copy IPv4 address"
               }
             }
 
             DetailValue {
               width: parent.width
               text: "--"
-              visible: root.selectedIfaceIps().length === 0
+              visible: root.selectedIfaceIpv4().length === 0
             }
           }
-          InfoLabel { text: "Gateway" }
+          InfoLabel { text: "IPv4 Gateway" }
           DetailValue {
-            text: root.info.gateway || "--"
-            copyable: !!root.info.gateway
+            Layout.columnSpan: 3
+            text: root.selectedIfaceGw4()
+            copyable: text !== "--"
             tooltipText: "Copy gateway"
+          }
+
+          Item {
+            Layout.fillWidth: true
+            Layout.columnSpan: 4
+            implicitHeight: Math.max(ipv6Label.implicitHeight, ipv6Switch.implicitHeight)
+
+            InfoLabel {
+              id: ipv6Label
+              text: "IPv6 Address"
+              anchors.left: parent.left
+              anchors.verticalCenter: parent.verticalCenter
+            }
+
+            ToggleSwitch {
+              id: ipv6Switch
+              trackHeight: Math.round(ipv6Label.font.pixelSize * 1.2)
+              cursorPad: Style.space(3)
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              checked: root.showIpv6
+              foreground: root.bar.foreground
+              onToggled: root.showIpv6 = !root.showIpv6
+
+              PanelToolTip {
+                visible: ipv6Switch.containsMouse
+                text: root.showIpv6 ? "Hide full addresses" : "Show full addresses"
+                fontFamily: root.bar.fontFamily
+              }
+            }
+          }
+          Column {
+            Layout.fillWidth: true
+            Layout.columnSpan: 4
+            spacing: 2
+
+            Repeater {
+              model: root.selectedIfaceIpv6()
+
+              DetailValue {
+                width: parent.width
+                text: root.showIpv6 ? modelData : root.maskedIpv6(modelData)
+                horizontalAlignment: Text.AlignHCenter
+                copyable: !!modelData
+                copyText: modelData
+                tooltipText: root.showIpv6 ? "Copy IPv6 address" : "Copy full address"
+              }
+            }
+
+            DetailValue {
+              width: parent.width
+              text: "--"
+              horizontalAlignment: Text.AlignHCenter
+              visible: root.selectedIfaceIpv6().length === 0
+            }
+          }
+          InfoLabel { text: "IPv6 Gateway" }
+          DetailValue {
+            Layout.columnSpan: 3
+            text: root.selectedIfaceGw6()
+            copyable: text !== "--"
+            tooltipText: "Copy gateway"
+          }
+
+          InfoLabel { text: "DNS Servers" }
+          Column {
+            Layout.fillWidth: true
+            Layout.columnSpan: 4
+            spacing: 2
+
+            Repeater {
+              model: root.selectedIfaceDns()
+
+              DetailValue {
+                width: parent.width
+                text: modelData
+                horizontalAlignment: Text.AlignHCenter
+                copyable: !!modelData
+                tooltipText: "Copy DNS server"
+              }
+            }
+
+            DetailValue {
+              width: parent.width
+              text: "--"
+              horizontalAlignment: Text.AlignHCenter
+              visible: root.selectedIfaceDns().length === 0
+            }
           }
         }
       }
@@ -2118,6 +2270,9 @@ Panel {
   component DetailValue: InfoValue {
     property bool copyable: false
     property string tooltipText: "Copy to clipboard"
+    // What lands on the clipboard when the displayed text is a mask.
+    // Empty falls back to the displayed text (the previous behaviour).
+    property string copyText: ""
 
     Layout.fillWidth: true
     horizontalAlignment: Text.AlignRight
@@ -2128,7 +2283,7 @@ Panel {
       enabled: copyable && parent.text !== ""
       hoverEnabled: enabled
       cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-      onClicked: root.copyToClipboard(parent.text)
+      onClicked: root.copyToClipboard(copyText !== "" ? copyText : parent.text)
     }
 
     PanelToolTip {
