@@ -39,8 +39,12 @@ Panel {
   property string selectedInterface: ""
 
   // IPv6 suffixes can identify the machine (EUI-64/DHCPv6 stability); the
-  // full list stays masked until explicitly revealed.
+  // full list stays masked until explicitly revealed via the eye toggle.
   property bool showIpv6: false
+
+  // Default shows only the ISP-delegated global addresses (2000::/3); ULA
+  // (fc00::/7) and link-local (fe80::/10) stay behind the ALL switch.
+  property bool showAllIpv6: false
 
   // Machine-wide resolvers (systemd-resolved "Global:" scope). Per-link
   // resolvers live on each entry of allInterfaces as entry.dns.
@@ -607,9 +611,22 @@ Panel {
     return entry.ipv4
   }
 
+  // Global unicast (2000::/3): first hex digit 2 or 3. Everything else
+  // (ULA fc/fd, link-local fe80) is treated as non-global here.
+  function isGlobalIpv6(addr) {
+    var c = String(addr).charAt(0).toLowerCase()
+    return c === "2" || c === "3"
+  }
+
   function selectedIfaceIpv6() {
     var entry = ifaceEntry(selectedInterface)
-    return entry ? entry.ipv6 : []
+    var list = entry ? entry.ipv6 : []
+    if (showAllIpv6) return list
+    var global = []
+    for (var i = 0; i < list.length; i++) {
+      if (isGlobalIpv6(list[i])) global.push(list[i])
+    }
+    return global
   }
 
   // Partial mask: hextets 3-6 become bullets, first two and last groups
@@ -1493,7 +1510,11 @@ Panel {
           Item {
             Layout.fillWidth: true
             Layout.columnSpan: 4
-            implicitHeight: Math.max(ipv6Label.implicitHeight, ipv6Switch.implicitHeight)
+            implicitHeight: Math.max(
+              ipv6Label.implicitHeight,
+              ipv6AllSwitch.implicitHeight,
+              ipv6EyeBtn.implicitHeight
+            )
 
             InfoLabel {
               id: ipv6Label
@@ -1502,20 +1523,44 @@ Panel {
               anchors.verticalCenter: parent.verticalCenter
             }
 
-            ToggleSwitch {
-              id: ipv6Switch
-              trackHeight: Math.round(ipv6Label.font.pixelSize * 1.2)
-              cursorPad: Style.space(3)
+            Row {
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
-              checked: root.showIpv6
-              foreground: root.bar.foreground
-              onToggled: root.showIpv6 = !root.showIpv6
+              spacing: Style.space(8)
 
-              PanelToolTip {
-                visible: ipv6Switch.containsMouse
-                text: root.showIpv6 ? "Hide full addresses" : "Show full addresses"
+              InfoLabel {
+                id: ipv6AllLabel
+                text: "ALL"
+                anchors.verticalCenter: parent.verticalCenter
+              }
+
+              ToggleSwitch {
+                id: ipv6AllSwitch
+                trackHeight: Math.round(ipv6Label.font.pixelSize * 1.2)
+                cursorPad: Style.space(3)
+                anchors.verticalCenter: ipv6AllLabel.verticalCenter
+                checked: root.showAllIpv6
+                foreground: root.bar.foreground
+                onToggled: root.showAllIpv6 = !root.showAllIpv6
+
+                PanelToolTip {
+                  visible: ipv6AllSwitch.containsMouse
+                  text: root.showAllIpv6
+                    ? "Showing all addresses (incl. ULA and link-local)"
+                    : "Showing ISP global addresses only"
+                  fontFamily: root.bar.fontFamily
+                }
+              }
+
+              // Password-style reveal: eye when masked, eye-slash when shown.
+              PanelActionButton {
+                id: ipv6EyeBtn
+                anchors.verticalCenter: ipv6AllLabel.verticalCenter
+                iconText: root.showIpv6 ? "\uF070" : "\uF06E"
+                tooltipText: root.showIpv6 ? "Hide full addresses" : "Show full addresses"
+                foreground: root.bar.foreground
                 fontFamily: root.bar.fontFamily
+                onClicked: root.showIpv6 = !root.showIpv6
               }
             }
           }
