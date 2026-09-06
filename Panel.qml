@@ -49,7 +49,10 @@ Panel {
   // Machine-wide resolvers (systemd-resolved "Global:" scope). Per-link
   // resolvers live on each entry of allInterfaces as entry.dns.
   property var dnsGlobal: []
-  readonly property string allIfacesScript: "/home/dash/.config/omarchy/plugins/dash.network/network-status-all.sh"
+  // Resolved against this file's own location (agents plugin does the same
+  // for its assets), so a shared clone finds the script under any username
+  // or plugin id. Process wants a path, so strip the file:// scheme.
+  readonly property string allIfacesScript: Qt.resolvedUrl("network-status-all.sh").toString().replace(/^file:\/\//, "")
 
   // Throughput tracking. Rates are computed as deltas between successive
   // `omarchy-network-status --verbose` samples (~1.5s apart via detailsPoll).

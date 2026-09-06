@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "id": "dash.network",
-  "name": "My Network",
+  "id": "das6ng.network",
+  "name": "Network+",
   "version": "1.0.0",
   "author": "Omarchy",
   "description": "Wi-Fi list and connection state",
@@ -12,8 +12,8 @@
     "barWidget": "Panel.qml"
   },
   "barWidget": {
-    "displayName": "My Network",
-    "description": "Wi-Fi list and connection state",
+    "displayName": "Network+",
+    "description": "Wi-Fi list and connection state with more address info",
     "category": "Network",
     "allowMultiple": false
   },
