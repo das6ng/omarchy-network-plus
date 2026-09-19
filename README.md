@@ -5,7 +5,7 @@ the built-in `omarchy.network` panel. Adds full interface/address visibility,
 live throughput, and latency stats on top of the stock Wi-Fi list and
 connection state.
 
-![Network+ panel](screenshots/panel.png)
+![Network+ panel](preview.png)
 
 ## What it adds over the stock widget
 
@@ -29,6 +29,16 @@ omarchy plugin add https://github.com/das6ng/omarchy-network-plus.git --enable
 Enabling replaces the stock network widget in place, in its bar section;
 disabling the plugin restores the stock widget. Existing IPC callers keep
 working: the panel still answers on the `omarchy.network` target.
+
+## Uninstall
+
+```bash
+omarchy plugin remove das6ng.network
+```
+
+Removal automatically re-enables and restores the stock `omarchy.network`
+widget. To keep the plugin installed but fall back to the stock widget
+temporarily, use `omarchy plugin disable das6ng.network` instead.
 
 ## Requirements
 
