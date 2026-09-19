@@ -1,5 +1,5 @@
 #!/bin/bash
-# All interfaces with their full address lists for the dash.network panel.
+# All interfaces with their full address lists for the das6ng.network panel.
 # Output: default-route key/value lines, a "---" separator, then per-interface
 # `interface` lines followed by `ipv4`/`ipv6` address lines and the interface's
 # per-family default gateways (`gw4`/`gw6`). Tab-separated.

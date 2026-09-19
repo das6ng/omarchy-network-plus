@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "id": "das6ng.network",
   "name": "Network+",
-  "version": "1.0.0",
-  "author": "Omarchy",
-  "description": "Wi-Fi list and connection state",
+  "version": "1.1.0",
+  "author": "das6ng",
+  "description": "Wi-Fi list and connection state with per-interface addresses, DNS servers, throughput, and ping stats",
   "kinds": [
     "bar-widget"
   ],
@@ -13,8 +13,9 @@
   },
   "barWidget": {
     "displayName": "Network+",
-    "description": "Wi-Fi list and connection state with more address info",
+    "description": "Wi-Fi list and connection state with per-interface addresses, DNS servers, throughput, and ping stats",
     "category": "Network",
+    "defaultSection": "right",
     "allowMultiple": false
   },
   "omarchy": {
