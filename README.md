@@ -5,6 +5,8 @@ the built-in `omarchy.network` panel. Adds full interface/address visibility,
 live throughput, and latency stats on top of the stock Wi-Fi list and
 connection state.
 
+![Network+ panel](screenshots/panel.png)
+
 ## What it adds over the stock widget
 
 - **All interfaces** with complete IPv4/IPv6 address lists, operstate, MAC,
